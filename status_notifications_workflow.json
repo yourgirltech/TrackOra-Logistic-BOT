@@ -1,0 +1,247 @@
+{
+  "name": "Logistics - Status Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "status-notification",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "1a1a1a1a-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "getAll",
+        "tableId": "shipments",
+        "returnAll": false,
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.record.shipment_id }}"
+            }
+          ]
+        }
+      },
+      "id": "1a1a1a1a-0002-0002-0002-000000000002",
+      "name": "Get Shipment",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "getAll",
+        "tableId": "customers",
+        "returnAll": false,
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.customer_id }}"
+            }
+          ]
+        }
+      },
+      "id": "1a1a1a1a-0003-0003-0003-000000000003",
+      "name": "Get Customer",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "msg-1",
+              "name": "message",
+              "type": "string",
+              "value": "=Hi {{ $json.name }}, your shipment {{ $('Webhook').item.json.body.record.event_type }} update: your package is now marked as \"{{ $('Webhook').item.json.body.record.event_type }}\" at {{ $('Webhook').item.json.body.record.location }}. We'll keep you posted!"
+            },
+            {
+              "id": "email-1",
+              "name": "customer_email",
+              "type": "string",
+              "value": "={{ $json.email }}"
+            },
+            {
+              "id": "shipment-1",
+              "name": "shipment_id",
+              "type": "string",
+              "value": "={{ $('Webhook').item.json.body.record.shipment_id }}"
+            },
+            {
+              "id": "status-1",
+              "name": "new_status",
+              "type": "string",
+              "value": "={{ $('Webhook').item.json.body.record.event_type }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1a1a1a1a-0004-0004-0004-000000000004",
+      "name": "Build Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "notifications@yourlogistics.com",
+        "toEmail": "={{ $json.customer_email }}",
+        "subject": "Shipment Status Update",
+        "text": "={{ $json.message }}",
+        "options": {}
+      },
+      "id": "1a1a1a1a-0005-0005-0005-000000000005",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "tableId": "shipments",
+        "filterType": "manual",
+        "matchingColumns": [
+          {
+            "keyName": "id",
+            "condition": "eq",
+            "keyValue": "={{ $json.shipment_id }}"
+          }
+        ],
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_status",
+              "fieldValue": "={{ $json.new_status }}"
+            }
+          ]
+        }
+      },
+      "id": "1a1a1a1a-0006-0006-0006-000000000006",
+      "name": "Update Shipment Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Shipment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shipment": {
+      "main": [
+        [
+          {
+            "node": "Get Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Customer": {
+      "main": [
+        [
+          {
+            "node": "Build Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Update Shipment Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

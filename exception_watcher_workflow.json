@@ -1,0 +1,204 @@
+{
+  "name": "Logistics - Exception Watcher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "2b2b2b2b-0001-0001-0001-000000000001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "getAll",
+        "tableId": "shipments",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "current_status",
+              "condition": "eq",
+              "keyValue": "customs_hold"
+            },
+            {
+              "keyName": "current_status",
+              "condition": "eq",
+              "keyValue": "failed_attempt"
+            }
+          ]
+        }
+      },
+      "id": "2b2b2b2b-0002-0002-0002-000000000002",
+      "name": "Get Stuck Shipments",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sev-1",
+              "name": "severity",
+              "type": "string",
+              "value": "={{ $json.current_status === 'customs_hold' ? 'high' : 'medium' }}"
+            },
+            {
+              "id": "issue-1",
+              "name": "issue_type",
+              "type": "string",
+              "value": "={{ $json.current_status === 'customs_hold' ? 'customs_delay' : 'delivery_failed' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2b2b2b2b-0003-0003-0003-000000000003",
+      "name": "Build Ticket Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "create",
+        "tableId": "tickets",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "shipment_id",
+              "fieldValue": "={{ $('Get Stuck Shipments').item.json.id }}"
+            },
+            {
+              "fieldId": "issue_type",
+              "fieldValue": "={{ $json.issue_type }}"
+            },
+            {
+              "fieldId": "severity",
+              "fieldValue": "={{ $json.severity }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "open"
+            }
+          ]
+        }
+      },
+      "id": "2b2b2b2b-0004-0004-0004-000000000004",
+      "name": "Create Ticket",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@yourlogistics.com",
+        "toEmail": "ops@yourlogistics.com",
+        "subject": "={{ 'Shipment Exception: ' + $('Get Stuck Shipments').item.json.waybill_id }}",
+        "text": "=A shipment needs attention.\n\nWaybill: {{ $('Get Stuck Shipments').item.json.waybill_id }}\nStatus: {{ $('Get Stuck Shipments').item.json.current_status }}\nSeverity: {{ $json.severity }}\nDestination: {{ $('Get Stuck Shipments').item.json.destination }}",
+        "options": {}
+      },
+      "id": "2b2b2b2b-0005-0005-0005-000000000005",
+      "name": "Notify Ops",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Stuck Shipments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stuck Shipments": {
+      "main": [
+        [
+          {
+            "node": "Build Ticket Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Ticket Fields": {
+      "main": [
+        [
+          {
+            "node": "Create Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Ticket": {
+      "main": [
+        [
+          {
+            "node": "Notify Ops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
