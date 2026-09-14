@@ -1,0 +1,181 @@
+{
+  "name": "Logistics - Customer Segmentation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "4d4d4d4d-0001-0001-0001-000000000001",
+      "name": "Schedule Trigger (Daily)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "getAll",
+        "tableId": "shipments",
+        "returnAll": true
+      },
+      "id": "4d4d4d4d-0002-0002-0002-000000000002",
+      "name": "Get All Shipments",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const items = $input.all();\nconst counts = {};\n\nfor (const item of items) {\n  const customerId = item.json.customer_id;\n  if (!customerId) continue;\n  counts[customerId] = (counts[customerId] || 0) + 1;\n}\n\nconst result = [];\nfor (const [customerId, count] of Object.entries(counts)) {\n  result.push({\n    json: {\n      customer_id: customerId,\n      shipment_count: count,\n      segment: count > 2 ? 'repeat' : 'new'\n    }\n  });\n}\n\nreturn result;"
+      },
+      "id": "4d4d4d4d-0003-0003-0003-000000000003",
+      "name": "Count Shipments Per Customer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.segment }}",
+              "rightValue": "repeat",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4d4d4d4d-0004-0004-0004-000000000004",
+      "name": "Is Repeat Customer?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "tableId": "customers",
+        "filterType": "manual",
+        "matchingColumns": [
+          {
+            "keyName": "id",
+            "condition": "eq",
+            "keyValue": "={{ $json.customer_id }}"
+          }
+        ],
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "segment",
+              "fieldValue": "repeat"
+            }
+          ]
+        }
+      },
+      "id": "4d4d4d4d-0005-0005-0005-000000000005",
+      "name": "Update to Repeat Segment",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Daily)": {
+      "main": [
+        [
+          {
+            "node": "Get All Shipments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Shipments": {
+      "main": [
+        [
+          {
+            "node": "Count Shipments Per Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Shipments Per Customer": {
+      "main": [
+        [
+          {
+            "node": "Is Repeat Customer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Repeat Customer?": {
+      "main": [
+        [
+          {
+            "node": "Update to Repeat Segment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
