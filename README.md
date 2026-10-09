@@ -2,6 +2,8 @@
 
 A set of n8n workflows that automate the customer-facing and operational side of a logistics business, backed by Supabase.
 
+> **In production for a client.** The live system runs on the client's own domain and isn't linked here. This repository is the build record: the full source, with client data, credentials and URLs removed.
+
 Instead of a monolithic CRM, this repo is seven independent workflows that each own one job: answering tracking questions, keeping customers informed, catching stuck shipments, capturing new leads, segmenting customers, triaging inquiries with AI, and booking sales calls. They share a single Supabase database, so they compose naturally — an event written by one workflow is what triggers another. Each workflow is a plain JSON file you can import into any n8n instance and wire up to your own credentials.
 
 ## Workflows
