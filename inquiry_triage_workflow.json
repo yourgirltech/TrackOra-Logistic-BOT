@@ -1,0 +1,195 @@
+{
+  "name": "Logistics - Inquiry Triage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inquiry",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a9e56d25-8dc8-4e9a-813e-b62d6cae7ecb",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        80
+      ],
+      "webhookId": "a657df44-21ab-454a-8cf1-2b84b7a65b8e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.type }}",
+              "rightValue": "deep",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3cba8b9-ee86-4be8-a215-7b3b039d3d03",
+      "name": "Is Deep Inquiry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"needs_call\",\n  \"message\": \"Thanks for reaching out! This looks like something our team should discuss with you directly. Please fill out the quick form below so we can schedule a call.\"\n}",
+        "options": {}
+      },
+      "id": "99d3dddd-99f0-415a-9727-86dff9a18a2a",
+      "name": "Respond - Needs Call",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"answered\",\n  \"message\": {{ JSON.stringify($json.reply) }}\n}",
+        "options": {}
+      },
+      "id": "2f7625f3-06b6-464f-9319-10e5ede9a255",
+      "name": "Respond - Direct Answer",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3-flash-preview",
+          "cachedResultName": "models/gemini-3-flash-preview",
+          "cachedResultUrl": ""
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Here is the conversation so far between a customer and our logistics company:\n\n{{ $json.body.history ? $json.body.history.map(h => (h.role === 'user' ? 'Customer: ' : 'Trackora: ') + h.content).join('\\n') : '' }}\nCustomer: {{ $json.body.message }}\n\nDecide if this conversation, taken as a whole, is still SIMPLE (a general question you can fully answer - like route availability, general pricing, how tracking works, pickup vs drop-off logistics) or has become DEEP (needs a real conversation with a human - bulk/enterprise volumes, custom contracts, specific pricing negotiation, or the customer asking something you genuinely can't resolve with a plain reply).\n\nRespond with ONLY valid JSON, no markdown, no code fences, in exactly this shape:\n{\"type\": \"simple\" or \"deep\", \"reply\": \"your friendly reply continuing the conversation naturally if simple, or empty string if deep\"}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -656,
+        80
+      ],
+      "id": "0ef9e7a3-11ed-4127-a5f1-ea824d996c3a",
+      "name": "Message a model",
+      "retryOnFail": true,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $json.content.parts[0].text;\nraw = raw.replace(/```json/g, '').replace(/```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  parsed = { type: 'deep', reply: '' };\n}\n\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        224
+      ],
+      "id": "05d2bf32-70d5-4923-a41a-fd42be51f9d9",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "connections": {
+    "Is Deep Inquiry?": {
+      "main": [
+        [
+          {
+            "node": "Respond - Needs Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Direct Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Is Deep Inquiry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false
+}

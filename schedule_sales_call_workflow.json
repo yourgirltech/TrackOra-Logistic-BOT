@@ -1,0 +1,220 @@
+{
+  "name": "Logistics - Schedule Sales Call",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "schedule-call",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "aa793f98-edc1-49c9-a767-a7fc9f9d8402",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -128
+      ],
+      "webhookId": "85202d39-283f-439f-941e-b68d38200fd2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\nconst start = new Date(`${body.preferred_date}T${body.preferred_time}:00`);\nconst end = new Date(start.getTime() + 30 * 60000);\n\nreturn [{\n  json: {\n    contact_name: body.contact_name,\n    email: body.email,\n    phone: body.phone,\n    inquiry_details: body.inquiry_details,\n    start_iso: start.toISOString(),\n    end_iso: end.toISOString(),\n    display_date: start.toLocaleDateString(),\n    display_time: start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })\n  }\n}];"
+      },
+      "id": "20867644-db1e-40f4-82ad-25c36dce066a",
+      "name": "Build Event Times",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "call_requests",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "contact_name",
+              "fieldValue": "={{ $json.contact_name }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $json.email }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $json.phone }}"
+            },
+            {
+              "fieldId": "inquiry_details",
+              "fieldValue": "={{ $json.inquiry_details }}"
+            },
+            {
+              "fieldId": "scheduled_at",
+              "fieldValue": "={{ $json.start_iso }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "scheduled"
+            }
+          ]
+        }
+      },
+      "id": "ff4f8f15-ba44-4d3a-af96-64254128506a",
+      "name": "Save Call Request",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        288,
+        -128
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "mode": "list",
+          "value": "primary"
+        },
+        "start": "={{ $('Build Event Times').item.json.start_iso }}",
+        "end": "={{ $('Build Event Times').item.json.end_iso }}",
+        "additionalFields": {
+          "attendees": [
+            "={{ $('Build Event Times').item.json.email }}",
+            "sales@yourlogistics.com"
+          ],
+          "description": "={{ $('Build Event Times').item.json.inquiry_details }}",
+          "sendUpdates": "all",
+          "summary": "=Sales Call - {{ $('Build Event Times').item.json.contact_name }}"
+        }
+      },
+      "id": "edfd9414-b56e-413b-9497-2b20027d9ebe",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        512,
+        -128
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "you@your-domain.com",
+        "toEmail": "={{ $('Build Event Times').item.json.email }}",
+        "subject": "Your call with our team is confirmed",
+        "emailFormat": "text",
+        "text": "=Hi {{ $('Build Event Times').item.json.contact_name }},\n\nYour call is confirmed for {{ $('Build Event Times').item.json.display_date }} at {{ $('Build Event Times').item.json.display_time }}.\n\nYou'll also receive a separate Google Calendar invite - just accept it and it'll be added to your calendar automatically, with reminders 20 and 10 minutes before the call.\n\nLooking forward to speaking with you!",
+        "options": {}
+      },
+      "id": "6e104b77-4aab-41c4-bca6-bc5f9d1a556f",
+      "name": "Send Confirmation Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        720,
+        -128
+      ],
+      "webhookId": "9faf9234-9a72-4a1a-9419-98206efb34bb",
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"scheduled\",\n  \"message\": \"Your call is confirmed! Check your email for details.\"\n}",
+        "options": {}
+      },
+      "id": "2ebbf129-2376-4a05-8dc0-5e9b86f46db4",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        944,
+        -128
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Event Times",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Event Times": {
+      "main": [
+        [
+          {
+            "node": "Save Call Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Call Request": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Confirmation Email": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false
+}
