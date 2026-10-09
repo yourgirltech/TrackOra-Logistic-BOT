@@ -2,7 +2,7 @@
 
 A set of n8n workflows that automate the customer-facing and operational side of a logistics business, backed by Supabase.
 
-Instead of a monolithic CRM, this repo is five independent workflows that each own one job: answering tracking questions, keeping customers informed, catching stuck shipments, capturing new leads, and segmenting customers. They share a single Supabase database, so they compose naturally — an event written by one workflow is what triggers another. Each workflow is a plain JSON file you can import into any n8n instance and wire up to your own credentials.
+Instead of a monolithic CRM, this repo is seven independent workflows that each own one job: answering tracking questions, keeping customers informed, catching stuck shipments, capturing new leads, segmenting customers, triaging inquiries with AI, and booking sales calls. They share a single Supabase database, so they compose naturally — an event written by one workflow is what triggers another. Each workflow is a plain JSON file you can import into any n8n instance and wire up to your own credentials.
 
 ## Workflows
 
@@ -26,16 +26,25 @@ Captures inbound quote requests and makes sure nobody falls through the cracks. 
 
 Runs once a day to keep customer segments current. It pulls every row from `shipments`, counts them per `customer_id` in a Code node, and labels anyone with more than two shipments as `repeat`. Matching customers get their `segment` column updated in the `customers` table. It's deliberately simple, and the counting logic is the obvious place to extend — add recency, revenue, or lane-based tiers and the rest of the workflow stays the same.
 
+### Inquiry Triage — `inquiry_triage_workflow.json`
+
+The front door for the website chat. A webhook receives the customer's message plus the conversation history, and Google Gemini judges the whole conversation: general questions (route availability, general pricing, how tracking works, pickup vs drop-off) are `simple` and get a direct answer, while bulk or enterprise volumes, custom contracts, specific pricing negotiation, or anything it can't resolve is marked `deep`. Gemini returns strict JSON, a Code node parses it defensively, and the webhook responds with either `answered` plus the reply, or `needs_call` so the widget can show the booking form. The AI answers what it safely can and hands off the rest.
+
+### Schedule Sales Call — `schedule_sales_call_workflow.json`
+
+Picks up where triage hands off. The booking form posts the contact's details and a preferred date and time; the workflow builds the event window, saves the request to `call_requests` in Supabase, creates a Google Calendar event that invites both the prospect and the sales inbox, emails the prospect a confirmation, and responds `scheduled`. A chat that needs a human becomes a booked call, with no back-and-forth email.
+
 ## Tech Stack
 
-- **[n8n](https://n8n.io)** — workflow automation engine; hosts and runs all five workflows
+- **[n8n](https://n8n.io)** — workflow automation engine; hosts and runs all seven workflows
 - **[Supabase](https://supabase.com)** — Postgres database and REST API used as the system of record; also the source of the database webhooks that drive the event-triggered workflows
 - **[Google Gemini](https://ai.google.dev)** (`gemini-3-flash-preview` via the n8n LangChain Google Gemini node) — generates the natural-language status replies in the tracking chatbot
+- **Google Calendar** — sales-call events with invites
 - **SMTP** — outbound email for customer notifications, ops alerts, and sales follow-ups
 
 ## Database Schema
 
-Five tables in Supabase. Key columns referenced by the workflows:
+Six tables in Supabase. Key columns referenced by the workflows:
 
 | Table | Key columns |
 | --- | --- |
@@ -44,6 +53,7 @@ Five tables in Supabase. Key columns referenced by the workflows:
 | `events` | `id`, `shipment_id` → `shipments.id`, `event_type`, `location`, `timestamp` |
 | `tickets` | `id`, `shipment_id` → `shipments.id`, `issue_type`, `severity`, `status` |
 | `leads` | `id`, `company_name`, `contact_name`, `email`, `phone`, `cargo_details`, `status` |
+| `call_requests` | booking requests from the Schedule Sales Call workflow (contact, email, preferred date/time, inquiry details) |
 
 `shipments.current_status` and `events.event_type` share a status vocabulary — `in_transit`, `customs_hold`, `failed_attempt`, `delivered`, and so on. The exception watcher keys off `customs_hold` and `failed_attempt` specifically.
 
@@ -59,15 +69,16 @@ Each JSON file is a standalone n8n workflow. In your n8n instance:
 
 - **Supabase nodes** — your own Supabase API credential (project URL + service role key)
 - **Email (SMTP) nodes** — your own SMTP credential
-- **Google Gemini node** (tracking chatbot only) — your own Google Gemini / PaLM API credential
+- **Google Calendar node** (schedule sales call) — your own Google Calendar OAuth credential
+- **Google Gemini nodes** (tracking chatbot and inquiry triage) — your own Google Gemini / PaLM API credential
 
 While you're in there, also replace the placeholder sender and recipient addresses (`alerts@`, `ops@`, `sales@`, `notifications@yourlogistics.com`) with your real ones, and note the webhook URLs n8n generates for the webhook-triggered workflows — you'll need them to point your forms and Supabase database webhooks at the right place.
 
 ## Setup Requirements
 
-- **A Supabase project** with the five tables above created. The workflows assume the column names listed in the schema section; if yours differ, update the field mappings in the Supabase nodes.
+- **A Supabase project** with the six tables above created. The workflows assume the column names listed in the schema section; if yours differ, update the field mappings in the Supabase nodes.
 - **An n8n instance** — either n8n Cloud or self-hosted. The tracking chatbot uses the `@n8n/n8n-nodes-langchain` Google Gemini node, so a reasonably recent version is required.
-- **SMTP credentials** for outbound email (any provider — SES, Postmark, SendGrid, Gmail SMTP, etc.). Three of the five workflows send mail.
+- **SMTP credentials** for outbound email (any provider — SES, Postmark, SendGrid, Gmail SMTP, etc.). Four of the seven workflows send mail.
 - **A Google Gemini API key** for the tracking chatbot.
 - **Supabase database webhooks** (optional but recommended) pointing at the status-notification workflow's webhook URL, so status emails fire automatically when a row lands in `events`.
 
